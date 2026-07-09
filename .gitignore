@@ -1,0 +1,6 @@
+node_modules/
+terraform/build/
+terraform/.terraform/
+*.tfstate
+*.tfstate.backup
+.DS_Store

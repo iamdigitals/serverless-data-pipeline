@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Serverless Data Pipeline — Live Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0C10; --surface:#12151C; --border:#242933;
+    --text:#E8EAED; --muted:#8B92A0; --mint:#4FD1AE; --mint-dim:rgba(79,209,174,0.12);
+    --amber:#F0A860; --amber-dim:rgba(240,168,96,0.12);
+    --red:#E17878; --red-dim:rgba(225,120,120,0.12);
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .mono{ font-family:'JetBrains Mono',monospace; }
+  .card{ max-width:560px; width:100%; }
+  .eyebrow{ display:inline-flex; align-items:center; gap:8px; font-size:12px; color:var(--mint); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:16px; }
+  .eyebrow::before{ content:''; width:6px; height:6px; border-radius:50%; background:var(--mint); box-shadow:0 0 0 3px var(--mint-dim); }
+  h1{ font-family:'JetBrains Mono',monospace; font-size:26px; margin-bottom:10px; }
+  p.sub{ color:var(--muted); font-size:14px; margin-bottom:32px; }
+
+  .dropzone{
+    border:1px dashed var(--border); border-radius:6px; padding:40px 24px; text-align:center;
+    cursor:pointer; transition:all .2s; background:var(--surface);
+  }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--mint); background:var(--mint-dim); }
+  .dropzone p{ color:var(--muted); font-size:14px; }
+  .dropzone .mono{ font-size:12px; color:var(--muted); margin-top:8px; }
+  input[type=file]{ display:none; }
+
+  .status-box{ margin-top:24px; background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:20px; display:none; }
+  .status-box.show{ display:block; }
+  .status-line{ display:flex; align-items:center; gap:10px; font-size:13px; font-family:'JetBrains Mono',monospace; margin-bottom:6px; }
+  .status-dot{ width:8px; height:8px; border-radius:50%; background:var(--border); flex-shrink:0; }
+  .status-dot.active{ background:var(--amber); box-shadow:0 0 8px var(--amber-dim); }
+  .status-dot.done{ background:var(--mint); box-shadow:0 0 8px var(--mint-dim); }
+  .status-dot.error{ background:var(--red); box-shadow:0 0 8px var(--red-dim); }
+
+  .result{ margin-top:20px; display:none; }
+  .result.show{ display:block; }
+  .result img{ width:100%; border-radius:4px; border:1px solid var(--border); margin-bottom:16px; }
+  .meta-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--border); border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+  .meta-item{ background:var(--surface); padding:12px 14px; }
+  .meta-item .val{ font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--mint); }
+  .meta-item .lbl{ font-size:11px; color:var(--muted); margin-top:2px; }
+
+  .error-msg{ color:var(--red); font-size:13px; margin-top:12px; }
+  .reset-link{ display:inline-block; margin-top:20px; font-size:13px; color:var(--muted); text-decoration:underline; cursor:pointer; }
+  .reset-link:hover{ color:var(--text); }
+  a.back{ display:inline-block; margin-top:32px; font-size:13px; color:var(--muted); }
+  a.back:hover{ color:var(--mint); }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="eyebrow">Live AWS demo</div>
+  <h1>// serverless_data_pipeline</h1>
+  <p class="sub">Upload an image (JPEG/PNG/WebP, max 5MB). It goes straight to S3 via a presigned URL, an event-driven Lambda extracts its metadata, and the result lands in DynamoDB — all shown here in real time. Files auto-delete after 24 hours.</p>
+
+  <div class="dropzone" id="dropzone">
+    <p><strong style="color:var(--text)">Click to choose a file</strong> or drag one here</p>
+    <div class="mono">JPEG · PNG · WebP — up to 5MB</div>
+    <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" />
+  </div>
+
+  <div class="status-box" id="statusBox">
+    <div class="status-line"><div class="status-dot" id="dot1"></div><span id="line1">Requesting upload URL…</span></div>
+    <div class="status-line"><div class="status-dot" id="dot2"></div><span id="line2">Uploading to S3…</span></div>
+    <div class="status-line"><div class="status-dot" id="dot3"></div><span id="line3">Processing (Lambda + DynamoDB)…</span></div>
+    <div class="error-msg" id="errorMsg" style="display:none;"></div>
+  </div>
+
+  <div class="result" id="result">
+    <img id="resultImg" src="" alt="Processed upload" />
+    <div class="meta-grid">
+      <div class="meta-item"><div class="val" id="metaDim">—</div><div class="lbl">dimensions</div></div>
+      <div class="meta-item"><div class="val" id="metaFormat">—</div><div class="lbl">format</div></div>
+      <div class="meta-item"><div class="val" id="metaSize">—</div><div class="lbl">file size</div></div>
+      <div class="meta-item"><div class="val" id="metaTime">—</div><div class="lbl">time to process</div></div>
+    </div>
+    <span class="reset-link" id="resetLink">Upload another →</span>
+  </div>
+
+  <a href="#" class="back">← Back to portfolio</a>
+</div>
+
+<script>
+  // Set this to the api_endpoint Terraform output after `terraform apply`
+  const API_BASE = "REPLACE_WITH_API_ENDPOINT";
+
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const statusBox = document.getElementById('statusBox');
+  const dots = [document.getElementById('dot1'), document.getElementById('dot2'), document.getElementById('dot3')];
+  const lines = [document.getElementById('line1'), document.getElementById('line2'), document.getElementById('line3')];
+  const errorMsg = document.getElementById('errorMsg');
+  const result = document.getElementById('result');
+  const resultImg = document.getElementById('resultImg');
+  const metaDim = document.getElementById('metaDim');
+  const metaFormat = document.getElementById('metaFormat');
+  const metaSize = document.getElementById('metaSize');
+  const metaTime = document.getElementById('metaTime');
+  const resetLink = document.getElementById('resetLink');
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+  resetLink.addEventListener('click', () => location.reload());
+
+  function setStep(i, state) {
+    dots[i].className = 'status-dot ' + state;
+  }
+
+  async function handleFile(file) {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      showError('Please choose a JPEG, PNG, or WebP image.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showError('File is too large — 5MB max.');
+      return;
+    }
+
+    statusBox.classList.add('show');
+    result.classList.remove('show');
+    errorMsg.style.display = 'none';
+    dots.forEach(d => d.className = 'status-dot');
+    const startTime = Date.now();
+
+    try {
+      // Step 1: get presigned URL
+      setStep(0, 'active');
+      const res1 = await fetch(`${API_BASE}/upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contentType: file.type }),
+      });
+      if (!res1.ok) throw new Error('Could not get upload URL');
+      const { id, url, fields } = await res1.json();
+      setStep(0, 'done');
+
+      // Step 2: upload directly to S3
+      setStep(1, 'active');
+      const formData = new FormData();
+      Object.entries(fields).forEach(([k, v]) => formData.append(k, v));
+      formData.append('file', file);
+      const res2 = await fetch(url, { method: 'POST', body: formData });
+      if (!res2.ok) throw new Error('Upload to S3 failed');
+      setStep(1, 'done');
+
+      // Step 3: poll for processing status
+      setStep(2, 'active');
+      const data = await pollStatus(id);
+      setStep(2, 'done');
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      showResult(data, elapsed);
+    } catch (err) {
+      console.error(err);
+      showError(err.message || 'Something went wrong.');
+      dots.forEach(d => { if (!d.className.includes('done')) d.className = 'status-dot error'; });
+    }
+  }
+
+  async function pollStatus(id, attempts = 20) {
+    for (let i = 0; i < attempts; i++) {
+      const res = await fetch(`${API_BASE}/status/${id}`);
+      const data = await res.json();
+      if (data.status === 'completed') return data;
+      if (data.status === 'failed') throw new Error(data.error || 'Processing failed');
+      await new Promise(r => setTimeout(r, 1200));
+    }
+    throw new Error('Timed out waiting for processing to finish.');
+  }
+
+  function showResult(data, elapsed) {
+    resultImg.src = data.viewUrl;
+    metaDim.textContent = `${data.width} × ${data.height}`;
+    metaFormat.textContent = (data.format || '').toUpperCase();
+    metaSize.textContent = formatBytes(data.contentLength);
+    metaTime.textContent = `${elapsed}s`;
+    result.classList.add('show');
+  }
+
+  function showError(msg) {
+    errorMsg.textContent = msg;
+    errorMsg.style.display = 'block';
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes) return '—';
+    const kb = bytes / 1024;
+    return kb > 1024 ? `${(kb / 1024).toFixed(2)} MB` : `${kb.toFixed(0)} KB`;
+  }
+</script>
+
+</body>
+</html>
