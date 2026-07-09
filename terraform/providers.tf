@@ -11,6 +11,14 @@ terraform {
       version = "~> 2.4"
     }
   }
+
+  # State must persist here — this project deploys entirely from GitHub Actions'
+  # ephemeral runners, which have no disk to keep local state on between runs.
+  backend "s3" {
+    bucket = "iamdigitals-tfstate-075566976501"
+    key    = "serverless-data-pipeline/terraform.tfstate"
+    region = "us-east-1"
+  }
 }
 
 provider "aws" {
