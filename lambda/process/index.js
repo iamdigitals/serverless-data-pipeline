@@ -37,8 +37,8 @@ exports.handler = async (event) => {
           TableName: TABLE,
           Key: { id },
           UpdateExpression:
-            "SET #status = :status, bucket = :bucket, #key = :key, contentLength = :len, contentType = :type, width = :w, height = :h, #fmt = :fmt, processedAt = :now, expiresAt = :exp",
-          ExpressionAttributeNames: { "#status": "status", "#key": "key", "#fmt": "format" },
+            "SET #status = :status, #bucket = :bucket, #key = :key, contentLength = :len, contentType = :type, width = :w, height = :h, #fmt = :fmt, processedAt = :now, expiresAt = :exp",
+          ExpressionAttributeNames: { "#status": "status", "#bucket": "bucket", "#key": "key", "#fmt": "format" },
           ExpressionAttributeValues: {
             ":status": "completed",
             ":bucket": bucket,
