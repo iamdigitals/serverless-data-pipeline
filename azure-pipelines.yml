@@ -6,8 +6,7 @@
 trigger:
 - main
 
-pool:
-  pool: 'Default'
+pool: 'Default'
 
 steps:
 - script: echo Hello, world!
