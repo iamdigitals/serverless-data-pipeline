@@ -9,10 +9,8 @@ trigger:
 pool: 'Default'
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+- script: npm install
+  displayName: 'Install dependencies'
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+- script: npm test
+  displayName: 'Run tests'
